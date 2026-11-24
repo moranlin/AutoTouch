@@ -1,0 +1,198 @@
+package com.local.autotouch
+
+import android.annotation.SuppressLint
+import android.app.Activity
+import android.app.AlertDialog
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
+import android.view.View
+import android.view.WindowManager
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.Switch
+import android.widget.TextView
+import android.widget.Toast
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+class MainActivity : Activity() {
+
+    private lateinit var store: WorkflowStore
+    private lateinit var container: LinearLayout
+    private lateinit var tvEmpty: TextView
+    private lateinit var tvAccess: TextView
+    private lateinit var tvOverlay: TextView
+    private lateinit var tvBattery: TextView
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        store = WorkflowStore(this)
+
+        container = findViewById(R.id.llWorkflows)
+        tvEmpty = findViewById(R.id.tvEmpty)
+        tvAccess = findViewById(R.id.tvAccess)
+        tvOverlay = findViewById(R.id.tvOverlay)
+        tvBattery = findViewById(R.id.tvBattery)
+        // 用真实屏幕尺寸而不是 App 窗口尺寸，否则高度会少掉状态栏/导航栏
+        val real = android.util.DisplayMetrics()
+        @Suppress("DEPRECATION")
+        (getSystemService(WindowManager::class.java)).defaultDisplay.getRealMetrics(real)
+        findViewById<TextView>(R.id.tvScreen).text =
+            "屏幕分辨率：${real.widthPixels} x ${real.heightPixels}"
+
+        findViewById<Button>(R.id.btnAccessibility).setOnClickListener {
+            openSettings(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        }
+        findViewById<Button>(R.id.btnOverlay).setOnClickListener {
+            if (!Settings.canDrawOverlays(this)) {
+                openSettings(
+                    Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:$packageName")
+                    )
+                )
+            }
+        }
+        findViewById<Button>(R.id.btnBattery).setOnClickListener { requestIgnoreBattery() }
+        findViewById<Button>(R.id.btnAdd).setOnClickListener {
+            startActivity(Intent(this, WorkflowEditActivity::class.java))
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshPermissions()
+        renderWorkflows()
+    }
+
+    private fun refreshPermissions() {
+        val accessOk = isAccessibilityEnabled()
+        tvAccess.text = if (accessOk) "✓ 无障碍服务已开启" else "✗ 无障碍服务未开启（必须开启）"
+        tvAccess.setTextColor(if (accessOk) GREEN else RED)
+
+        val overlayOk = Settings.canDrawOverlays(this)
+        tvOverlay.text = if (overlayOk) "✓ 悬浮窗权限已授予" else "✗ 悬浮窗权限未授予（安卓 10+ 需要）"
+        tvOverlay.setTextColor(if (overlayOk) GREEN else RED)
+
+        val batteryOk = isIgnoringBattery()
+        tvBattery.text = if (batteryOk) "✓ 已忽略电池优化" else "✗ 未忽略电池优化（可能延迟触发）"
+        tvBattery.setTextColor(if (batteryOk) GREEN else RED)
+    }
+
+    private fun renderWorkflows() {
+        container.removeAllViews()
+        // 按执行时间排序，方便一眼看清当天顺序
+        val workflows = store.load().sortedWith(compareBy({ it.hour }, { it.minute }))
+        tvEmpty.visibility = if (workflows.isEmpty()) View.VISIBLE else View.GONE
+
+        workflows.forEach { workflow ->
+            val row = layoutInflater.inflate(R.layout.item_workflow, container, false)
+            row.findViewById<TextView>(R.id.tvName).text =
+                workflow.name.ifBlank { "未命名工作流" }
+            row.findViewById<TextView>(R.id.tvSchedule).text =
+                "${workflow.describeSchedule()} · ${workflow.steps.size} 步 · ${appLabel(workflow.targetPackage)}"
+
+            val next = workflow.nextTriggerAt()
+            row.findViewById<TextView>(R.id.tvNext).text = when {
+                !workflow.enabled -> "已关闭"
+                next == null -> "无可执行日期"
+                else -> "下次执行：${formatTime(next)}"
+            }
+
+            val toggle = row.findViewById<Switch>(R.id.swEnabled)
+            toggle.isChecked = workflow.enabled
+            toggle.setOnCheckedChangeListener { _, checked ->
+                workflow.enabled = checked
+                store.upsert(workflow)
+                if (checked) Scheduler.schedule(this, workflow) else Scheduler.cancel(this, workflow)
+                renderWorkflows()
+            }
+
+            row.setOnClickListener {
+                startActivity(
+                    Intent(this, WorkflowEditActivity::class.java)
+                        .putExtra(Scheduler.EXTRA_WORKFLOW_ID, workflow.id)
+                )
+            }
+            row.setOnLongClickListener {
+                confirmDelete(workflow)
+                true
+            }
+            container.addView(row)
+        }
+    }
+
+    private fun confirmDelete(workflow: Workflow) {
+        AlertDialog.Builder(this)
+            .setTitle("删除工作流")
+            .setMessage("确定删除「${workflow.name.ifBlank { "未命名工作流" }}」？")
+            .setPositiveButton("删除") { _, _ ->
+                Scheduler.cancel(this, workflow)
+                store.delete(workflow.id)
+                renderWorkflows()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun appLabel(pkg: String): String {
+        if (pkg.isBlank()) return "未选择应用"
+        return try {
+            packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+        } catch (e: Exception) {
+            pkg
+        }
+    }
+
+    private fun isAccessibilityEnabled(): Boolean {
+        if (AutoAccessibilityService.isRunning) return true
+        val expected = "$packageName/${AutoAccessibilityService::class.java.name}"
+        val enabled = Settings.Secure.getString(
+            contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+        return enabled.split(':').any { it.equals(expected, ignoreCase = true) }
+    }
+
+    private fun isIgnoringBattery(): Boolean {
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        return pm.isIgnoringBatteryOptimizations(packageName)
+    }
+
+    @SuppressLint("BatteryLife")
+    private fun requestIgnoreBattery() {
+        if (isIgnoringBattery()) return
+        try {
+            startActivity(
+                Intent(
+                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:$packageName")
+                )
+            )
+        } catch (e: Exception) {
+            openSettings(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+        }
+    }
+
+    private fun openSettings(intent: Intent) {
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "无法打开系统设置", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun formatTime(timeMillis: Long): String =
+        SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(timeMillis))
+
+    private companion object {
+        const val GREEN = 0xFF1B5E20.toInt()
+        const val RED = 0xFFB71C1C.toInt()
+    }
+}

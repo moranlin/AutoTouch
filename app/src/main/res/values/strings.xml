@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AutoTouch</string>
+    <string name="accessibility_description">用于在定时唤醒屏幕后模拟上滑解锁和点击手势。仅在本机执行预设的点击操作，不读取、不上传任何内容。</string>
+</resources>
