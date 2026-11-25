@@ -102,6 +102,44 @@ class ScheduleTest {
         assertTrue("2027-04-05" in ChinaWorkCalendar.computedHolidays(2027))
     }
 
+    // ---------- 手机日历标题解析 ----------
+
+    @Test
+    fun `calendar title with ban means makeup workday`() {
+        assertEquals(true, PhoneCalendarSource.classifyTitle("国庆节补班"))
+        assertEquals(true, PhoneCalendarSource.classifyTitle("10月2日上班"))
+        assertEquals(true, PhoneCalendarSource.classifyTitle("春节调休上班"))
+    }
+
+    @Test
+    fun `calendar title with festival or xiu means holiday`() {
+        assertEquals(false, PhoneCalendarSource.classifyTitle("春节"))
+        assertEquals(false, PhoneCalendarSource.classifyTitle("国庆节"))
+        assertEquals(false, PhoneCalendarSource.classifyTitle("放假"))
+        assertEquals(false, PhoneCalendarSource.classifyTitle("中秋节休息"))
+        assertEquals(false, PhoneCalendarSource.classifyTitle("元旦"))
+    }
+
+    @Test
+    fun `unrelated calendar titles are ignored`() {
+        assertEquals(null, PhoneCalendarSource.classifyTitle("项目评审"))
+        assertEquals(null, PhoneCalendarSource.classifyTitle(""))
+        assertEquals(null, PhoneCalendarSource.classifyTitle(null))
+    }
+
+    @Test
+    fun `phone calendar data takes precedence over remote`() {
+        ChinaWorkCalendar.setRemoteData(mapOf("2026-10-02" to false))
+        ChinaWorkCalendar.setPhoneCalendarData(mapOf("2026-10-02" to true))
+        try {
+            assertTrue(ChinaWorkCalendar.isWorkday(2026, 10, 2))
+        } finally {
+            ChinaWorkCalendar.setPhoneCalendarData(emptyMap())
+            ChinaWorkCalendar.setRemoteData(emptyMap())
+        }
+        assertTrue(ChinaWorkCalendar.isHoliday(2026, 10, 2))
+    }
+
     @Test
     fun `remote data overrides bundled table`() {
         ChinaWorkCalendar.setRemoteData(mapOf("2026-10-01" to true, "2026-10-10" to false))

@@ -21,6 +21,8 @@
 2. **悬浮窗权限** —— Android 10+ 禁止后台服务直接弹界面，此权限是系统官方豁免条件。
 3. **忽略电池优化** —— 避免定时被系统推迟。
 
+三、四项是可选的数据源增强，见下文「法定工作日」。
+
 主界面顶部会实时显示三项状态，红色表示尚缺。
 
 ## 工作流
@@ -70,15 +72,36 @@
 
 判定顺序，前面的优先：
 
-1. **联网自动拉取**的官方数据 —— 启动时后台更新，每天最多一次，覆盖当年及未来两年；落盘缓存，断网继续用
-2. **内置** 2024–2027 年官方数据（来源 [NateScarlet/holiday-cn](https://github.com/NateScarlet/holiday-cn)，每条标注 gov.cn 通知）
-3. **农历推算** —— 按内置农历表（2000–2099）算出春节、端午、中秋，加上元旦/劳动节/国庆/清明，适用于任何年份
-4. 兜底：周一至周五上班
+1. **手机日历**里明确标注的日期 —— 授权读取日历后生效，离线可用，与你在日历 App 里看到的一致
+2. **联网自动拉取**的官方数据 —— 启动时后台更新，每天最多一次，覆盖当年及未来两年；落盘缓存，断网继续用
+3. **内置** 2024–2027 年官方数据（来源 [NateScarlet/holiday-cn](https://github.com/NateScarlet/holiday-cn)，每条标注 gov.cn 通知）
+4. **农历推算** —— 按内置农历表（2000–2099）算出春节、端午、中秋，加上元旦/劳动节/国庆/清明，适用于任何年份
+5. 兜底：周一至周五上班
+
+#### 手机日历（可选）
+
+主界面点「读取手机日历中的节假日」授权 `READ_CALENDAR` 即可。只认两类日历：
+
+- 名称含「节假日 / 假期 / 法定 / 假日 / 节日 / Holiday / 中国」
+- 且只读**全天事件**，避免把个人日程当成放假
+
+标题判定：含「班」→ 调休补班；含「休 / 放假」或是法定节日名（元旦、春节…国庆）→ 放假；其它忽略。
+「国庆节补班」这类同时含节日名的补班事件，会先按「班」判为上班。
+
+不同手机的差异：
+
+| 机型 | 情况 |
+| --- | --- |
+| 小米 / 华为 / OPPO / vivo | 一般自带「中国法定节假日」日历，含调休补班 |
+| 原生 Android / 海外版 | 通常没有该日历，此层自动跳过 |
+| Google 日历 | 需手动订阅「Holidays in China」，且只有放假、没有调休 |
+
+找不到或不授权都不影响使用，会继续用下面的网络 / 内置 / 农历数据。
 
 「周几」由 `java.util.Calendar` 直接算，不需要任何数据。
 
-- 1、2 两层带**调休补班**信息，最准确
-- 3 层只有法定假日、不含调休，属于离线兜底（国务院一般在每年 11 月公布次年安排，联网后会自动补上）
+- 1、2、3 三层带**调休补班**信息，最准确
+- 第 4 层只有法定假日、不含调休，属于最后的离线兜底（国务院一般在每年 11 月公布次年安排，联网后会自动补上）
 
 数据源自带多个镜像（jsDelivr / fastly / gcore / GitHub raw），国内网络下 GitHub raw 常连不通，会按顺序自动切换。主界面顶部显示当前数据来源与覆盖年份，也可手动点「重新获取节假日数据」。
 
@@ -106,7 +129,8 @@ flowchart LR
 | --- | --- |
 | [Workflow.kt](app/src/main/java/com/local/autotouch/Workflow.kt) | 数据模型、重复规则判定、下次触发时刻 |
 | [WorkflowStore.kt](app/src/main/java/com/local/autotouch/WorkflowStore.kt) | SharedPreferences + JSON 持久化 |
-| [ChinaWorkCalendar.kt](app/src/main/java/com/local/autotouch/ChinaWorkCalendar.kt) | 法定工作日判定：网络数据 / 内置表 / 农历推算三层 |
+| [ChinaWorkCalendar.kt](app/src/main/java/com/local/autotouch/ChinaWorkCalendar.kt) | 法定工作日判定：手机日历 / 网络 / 内置表 / 农历推算四层 |
+| [PhoneCalendarSource.kt](app/src/main/java/com/local/autotouch/PhoneCalendarSource.kt) | 读手机节假日日历，解析补班与放假 |
 | [HolidayRepository.kt](app/src/main/java/com/local/autotouch/HolidayRepository.kt) | 多镜像自动拉取节假日数据并缓存 |
 | [AutoTouchApp.kt](app/src/main/java/com/local/autotouch/AutoTouchApp.kt) | 启动时载入缓存并后台更新，更新后重排闹钟 |
 | [Scheduler.kt](app/src/main/java/com/local/autotouch/Scheduler.kt) | 每个工作流独立排闹钟 / 取消 |

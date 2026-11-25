@@ -11,10 +11,20 @@ class AutoTouchApp : Application() {
     override fun onCreate() {
         super.onCreate()
         HolidayRepository.loadCache(this)
+        loadPhoneCalendar()
+
         if (HolidayRepository.needsRefresh()) {
             HolidayRepository.refreshAsync(this) { changed ->
                 if (changed) Scheduler.rescheduleAll(this)
             }
         }
+    }
+
+    /** 读手机日历作为离线数据源；没有权限或没有节假日日历就静默跳过。 */
+    private fun loadPhoneCalendar() {
+        if (!PhoneCalendarSource.hasPermission(this)) return
+        val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+        val result = PhoneCalendarSource.read(this, year..year + 1)
+        ChinaWorkCalendar.setPhoneCalendarData(result.overrides)
     }
 }

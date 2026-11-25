@@ -7,10 +7,11 @@ import java.util.Locale
  * 中国法定工作日 / 节假日判定。
  *
  * 判定顺序（前者优先）：
- * 1. 网络自动拉取的官方数据（[HolidayRepository]，含节假日与调休补班）
- * 2. 内置官方数据（2024-2027，来源国务院通知 / holiday-cn）
- * 3. 按内置农历表推算的法定节假日（春节、端午、中秋、清明，覆盖 2000-2099）
- * 4. 兜底：周一至周五上班
+ * 1. 手机自带日历里明确标注的日期（[PhoneCalendarSource]，离线可用，与用户所见一致）
+ * 2. 网络自动拉取的官方数据（[HolidayRepository]，含节假日与调休补班）
+ * 3. 内置官方数据（2024-2027，来源国务院通知 / holiday-cn）
+ * 4. 按内置农历表推算的法定节假日（春节、端午、中秋、清明，覆盖 2000-2099）
+ * 5. 兜底：周一至周五上班
  *
  * 「周几」直接用 java.util.Calendar 计算，无需任何数据。
  */
@@ -154,8 +155,17 @@ object ChinaWorkCalendar {
     @Volatile
     private var remoteYears: Set<Int> = emptySet()
 
+    /** 手机日历读到的覆盖项。 */
+    @Volatile
+    private var phone: Map<String, Boolean> = emptyMap()
+
     /** 推算出的法定节假日，按年缓存；nextTriggerAt 会循环上百次，不能每次重算。 */
     private val computedHolidays = HashMap<Int, Set<String>>()
+
+    fun setPhoneCalendarData(overrides: Map<String, Boolean>) {
+        phone = overrides
+        computedHolidays.clear()
+    }
 
     fun setRemoteData(overrides: Map<String, Boolean>) {
         remote = overrides
@@ -171,6 +181,7 @@ object ChinaWorkCalendar {
 
     fun isWorkday(year: Int, month: Int, day: Int): Boolean {
         val key = key(year, month, day)
+        phone[key]?.let { return it }
         remote[key]?.let { return it }
         BUNDLED[key]?.let { return it }
         if (hasData(year)) return isWeekday(year, month, day)

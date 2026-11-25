@@ -92,6 +92,21 @@
             android:text="重新获取节假日数据"
             android:textSize="12sp" />
 
+        <TextView
+            android:id="@+id/tvCalendar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="6dp"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/btnCalendar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="36dp"
+            android:text="读取手机日历中的节假日（可选）"
+            android:textSize="12sp" />
+
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"

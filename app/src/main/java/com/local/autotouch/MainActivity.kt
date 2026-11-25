@@ -1,10 +1,12 @@
 package com.local.autotouch
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.PowerManager
@@ -17,6 +19,7 @@ import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -29,6 +32,7 @@ class MainActivity : Activity() {
     private lateinit var tvOverlay: TextView
     private lateinit var tvBattery: TextView
     private lateinit var tvHoliday: TextView
+    private lateinit var tvCalendar: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,6 +45,7 @@ class MainActivity : Activity() {
         tvOverlay = findViewById(R.id.tvOverlay)
         tvBattery = findViewById(R.id.tvBattery)
         tvHoliday = findViewById(R.id.tvHoliday)
+        tvCalendar = findViewById(R.id.tvCalendar)
         // 用真实屏幕尺寸而不是 App 窗口尺寸，否则高度会少掉状态栏/导航栏
         val real = android.util.DisplayMetrics()
         @Suppress("DEPRECATION")
@@ -63,6 +68,7 @@ class MainActivity : Activity() {
         }
         findViewById<Button>(R.id.btnBattery).setOnClickListener { requestIgnoreBattery() }
         findViewById<Button>(R.id.btnRefreshHoliday).setOnClickListener { refreshHolidayData() }
+        findViewById<Button>(R.id.btnCalendar).setOnClickListener { requestCalendar() }
         findViewById<Button>(R.id.btnAdd).setOnClickListener {
             startActivity(Intent(this, WorkflowEditActivity::class.java))
         }
@@ -77,6 +83,7 @@ class MainActivity : Activity() {
         super.onResume()
         refreshPermissions()
         refreshHolidayStatus()
+        refreshCalendarStatus()
         renderWorkflows()
         HolidayRepository.addListener(holidayListener)
     }
@@ -116,6 +123,58 @@ class MainActivity : Activity() {
             else -> "节假日数据：内置 $range 年（点下方按钮可联网更新）"
         }
         tvHoliday.setTextColor(if (fetched > 0L) GREEN else 0xFFB26A00.toInt())
+    }
+
+    private fun refreshCalendarStatus() {
+        if (!PhoneCalendarSource.hasPermission(this)) {
+            tvCalendar.text = "手机日历：未授权。授权后可离线读取节假日，作为网络数据的补充"
+            tvCalendar.setTextColor(0xFFB26A00.toInt())
+            return
+        }
+        val year = Calendar.getInstance().get(Calendar.YEAR)
+        val result = PhoneCalendarSource.read(this, year..year + 1)
+        tvCalendar.text = when {
+            !result.found ->
+                "手机日历：未找到节假日日历（小米/华为/OPPO 一般自带；原生安卓通常没有）"
+            result.overrides.isEmpty() ->
+                "手机日历：找到「${result.calendars.joinToString("、")}」，但没有可识别的全天事件"
+            else ->
+                "手机日历：已读取「${result.calendars.joinToString("、")}」共 " +
+                    "${result.overrides.size} 天（含调休补班）"
+        }
+        tvCalendar.setTextColor(if (result.found && result.overrides.isNotEmpty()) GREEN else 0xFFB26A00.toInt())
+    }
+
+    private fun requestCalendar() {
+        if (PhoneCalendarSource.hasPermission(this)) {
+            reloadPhoneCalendar()
+            toast("已重新读取手机日历")
+            return
+        }
+        requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), REQ_CALENDAR)
+    }
+
+    private fun reloadPhoneCalendar() {
+        val year = Calendar.getInstance().get(Calendar.YEAR)
+        val result = PhoneCalendarSource.read(this, year..year + 1)
+        ChinaWorkCalendar.setPhoneCalendarData(result.overrides)
+        refreshCalendarStatus()
+        renderWorkflows()
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQ_CALENDAR) return
+        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            reloadPhoneCalendar()
+        } else {
+            refreshCalendarStatus()
+            toast("未授权日历权限，将继续使用网络/内置数据")
+        }
     }
 
     private fun refreshHolidayData() {
@@ -229,8 +288,13 @@ class MainActivity : Activity() {
     private fun formatTime(timeMillis: Long): String =
         SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(timeMillis))
 
+    private fun toast(text: String) {
+        Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
+    }
+
     private companion object {
         const val GREEN = 0xFF1B5E20.toInt()
         const val RED = 0xFFB71C1C.toInt()
+        const val REQ_CALENDAR = 100
     }
 }
