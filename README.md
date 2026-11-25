@@ -66,15 +66,23 @@
 
 「保存并立即执行一次」可以马上就验证整条链路，不用等到设定时间。
 
-### 法定工作日
+### 法定工作日（自动获取）
 
-按国务院办公厅每年发布的放假安排判断：
+判定顺序，前面的优先：
 
-- 自动跳过周末和法定节假日
-- 自动识别**调休补班**（周末要上班的日子）
-- 内置 2024–2027 年数据，来源 [NateScarlet/holiday-cn](https://github.com/NateScarlet/holiday-cn)（每条都标注了 gov.cn 通知链接）
+1. **联网自动拉取**的官方数据 —— 启动时后台更新，每天最多一次，覆盖当年及未来两年；落盘缓存，断网继续用
+2. **内置** 2024–2027 年官方数据（来源 [NateScarlet/holiday-cn](https://github.com/NateScarlet/holiday-cn)，每条标注 gov.cn 通知）
+3. **农历推算** —— 按内置农历表（2000–2099）算出春节、端午、中秋，加上元旦/劳动节/国庆/清明，适用于任何年份
+4. 兜底：周一至周五上班
 
-数据在 [ChinaWorkCalendar.kt](app/src/main/java/com/local/autotouch/ChinaWorkCalendar.kt)，只记录与「周一到周五上班」默认规则不一致的日期，所以表很小。国务院一般在每年 11 月公布次年安排，届时按同样格式补一年即可；超出数据范围时界面会提示，并退化为「周一至周五」。
+「周几」由 `java.util.Calendar` 直接算，不需要任何数据。
+
+- 1、2 两层带**调休补班**信息，最准确
+- 3 层只有法定假日、不含调休，属于离线兜底（国务院一般在每年 11 月公布次年安排，联网后会自动补上）
+
+数据源自带多个镜像（jsDelivr / fastly / gcore / GitHub raw），国内网络下 GitHub raw 常连不通，会按顺序自动切换。主界面顶部显示当前数据来源与覆盖年份，也可手动点「重新获取节假日数据」。
+
+数据逻辑见 [ChinaWorkCalendar.kt](app/src/main/java/com/local/autotouch/ChinaWorkCalendar.kt)，网络层见 [HolidayRepository.kt](app/src/main/java/com/local/autotouch/HolidayRepository.kt)。
 
 ## 执行链路
 
@@ -98,7 +106,9 @@ flowchart LR
 | --- | --- |
 | [Workflow.kt](app/src/main/java/com/local/autotouch/Workflow.kt) | 数据模型、重复规则判定、下次触发时刻 |
 | [WorkflowStore.kt](app/src/main/java/com/local/autotouch/WorkflowStore.kt) | SharedPreferences + JSON 持久化 |
-| [ChinaWorkCalendar.kt](app/src/main/java/com/local/autotouch/ChinaWorkCalendar.kt) | 法定工作日 / 节假日判定 |
+| [ChinaWorkCalendar.kt](app/src/main/java/com/local/autotouch/ChinaWorkCalendar.kt) | 法定工作日判定：网络数据 / 内置表 / 农历推算三层 |
+| [HolidayRepository.kt](app/src/main/java/com/local/autotouch/HolidayRepository.kt) | 多镜像自动拉取节假日数据并缓存 |
+| [AutoTouchApp.kt](app/src/main/java/com/local/autotouch/AutoTouchApp.kt) | 启动时载入缓存并后台更新，更新后重排闹钟 |
 | [Scheduler.kt](app/src/main/java/com/local/autotouch/Scheduler.kt) | 每个工作流独立排闹钟 / 取消 |
 | [AlarmReceiver.kt](app/src/main/java/com/local/autotouch/AlarmReceiver.kt) | 到点触发，先排下一次再执行 |
 | [WakeService.kt](app/src/main/java/com/local/autotouch/WakeService.kt) | 前台服务 + WakeLock 点亮屏幕 |
@@ -116,5 +126,6 @@ flowchart LR
 - 坐标是屏幕绝对像素，换手机或改分辨率需重填。
 - 取点时若目标应用是横屏，取到的坐标仍是当时的屏幕坐标系，执行时也需保持同样的屏幕方向。
 - 部分国产 ROM（小米/华为/OPPO/vivo）还需额外开启「自启动」「后台弹出界面」，否则到点被拦截。
+- 离线且某年官方数据未获取时，只能推算法定假日，**调休补班日不准确**，界面会用黄字提示。
 - `setAlarmClock` 会在状态栏显示闹钟图标，这是它能精确穿透 Doze 的原因，属正常现象。
 - targetSdk 刻意保持 30（避开 Android 12+ 对前台服务类型、后台启动的新限制），仅用于个人侧载。

@@ -170,9 +170,11 @@ class WorkflowEditActivity : Activity() {
         if (ChinaWorkCalendar.hasData(year)) {
             tvHolidayHint.visibility = View.GONE
         } else {
+            val years = ChinaWorkCalendar.dataYears()
+            val range = if (years.isEmpty()) "无" else "${years.min()}-${years.max()}"
             tvHolidayHint.text =
-                "注意：${ChinaWorkCalendar.coveredYears.first}-${ChinaWorkCalendar.coveredYears.last} " +
-                    "年以外的节假日数据未内置，将按周一至周五粗略判断。"
+                "注意：$year 年的官方放假安排尚未获取（现有数据覆盖 $range 年），" +
+                    "将按农历推算的法定节假日近似判断，调休补班可能不准。"
             tvHolidayHint.visibility = View.VISIBLE
         }
     }

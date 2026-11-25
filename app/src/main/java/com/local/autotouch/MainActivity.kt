@@ -28,6 +28,7 @@ class MainActivity : Activity() {
     private lateinit var tvAccess: TextView
     private lateinit var tvOverlay: TextView
     private lateinit var tvBattery: TextView
+    private lateinit var tvHoliday: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,6 +40,7 @@ class MainActivity : Activity() {
         tvAccess = findViewById(R.id.tvAccess)
         tvOverlay = findViewById(R.id.tvOverlay)
         tvBattery = findViewById(R.id.tvBattery)
+        tvHoliday = findViewById(R.id.tvHoliday)
         // 用真实屏幕尺寸而不是 App 窗口尺寸，否则高度会少掉状态栏/导航栏
         val real = android.util.DisplayMetrics()
         @Suppress("DEPRECATION")
@@ -60,15 +62,28 @@ class MainActivity : Activity() {
             }
         }
         findViewById<Button>(R.id.btnBattery).setOnClickListener { requestIgnoreBattery() }
+        findViewById<Button>(R.id.btnRefreshHoliday).setOnClickListener { refreshHolidayData() }
         findViewById<Button>(R.id.btnAdd).setOnClickListener {
             startActivity(Intent(this, WorkflowEditActivity::class.java))
         }
     }
 
+    private val holidayListener: (Boolean) -> Unit = {
+        refreshHolidayStatus()
+        renderWorkflows()
+    }
+
     override fun onResume() {
         super.onResume()
         refreshPermissions()
+        refreshHolidayStatus()
         renderWorkflows()
+        HolidayRepository.addListener(holidayListener)
+    }
+
+    override fun onPause() {
+        HolidayRepository.removeListener(holidayListener)
+        super.onPause()
     }
 
     private fun refreshPermissions() {
@@ -83,6 +98,29 @@ class MainActivity : Activity() {
         val batteryOk = isIgnoringBattery()
         tvBattery.text = if (batteryOk) "✓ 已忽略电池优化" else "✗ 未忽略电池优化（可能延迟触发）"
         tvBattery.setTextColor(if (batteryOk) GREEN else RED)
+    }
+
+    private fun refreshHolidayStatus() {
+        val years = ChinaWorkCalendar.dataYears()
+        val range = if (years.isEmpty()) "无" else "${years.min()}-${years.max()}"
+        val fetched = HolidayRepository.lastFetchAt
+        val error = HolidayRepository.lastError
+
+        tvHoliday.text = when {
+            fetched > 0L -> "节假日数据：已自动更新 ${
+                SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(fetched))
+            }，覆盖 $range 年"
+
+            error != null -> "节假日数据：网络获取失败（$error），使用内置 $range 年 + 农历推算"
+            HolidayRepository.isRefreshing -> "节假日数据：内置 $range 年，正在后台自动更新…"
+            else -> "节假日数据：内置 $range 年（点下方按钮可联网更新）"
+        }
+        tvHoliday.setTextColor(if (fetched > 0L) GREEN else 0xFFB26A00.toInt())
+    }
+
+    private fun refreshHolidayData() {
+        tvHoliday.text = "节假日数据：正在获取…"
+        HolidayRepository.refreshAsync(this)
     }
 
     private fun renderWorkflows() {

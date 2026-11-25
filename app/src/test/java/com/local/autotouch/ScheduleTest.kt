@@ -56,6 +56,78 @@ class ScheduleTest {
         assertFalse(ChinaWorkCalendar.isWorkday(2030, 6, 1))  // 周六
     }
 
+    @Test
+    fun `year without data still knows fixed-date holidays`() {
+        assertFalse(ChinaWorkCalendar.isWorkday(2030, 1, 1))    // 元旦（周二）
+        assertFalse(ChinaWorkCalendar.isWorkday(2030, 5, 1))    // 劳动节（周三）
+        assertFalse(ChinaWorkCalendar.isWorkday(2030, 10, 1))   // 国庆（周二）
+        assertTrue(ChinaWorkCalendar.isWorkday(2030, 11, 5))    // 普通周二
+    }
+
+    @Test
+    fun `computed spring festival follows chinese calendar`() {
+        // 官方数据：2027 春节 2/6（新月 23:56，含朔之日为初一）
+        val h2027 = ChinaWorkCalendar.computedHolidays(2027)
+        assertTrue("2027 除夕" , "2027-02-05" in h2027)
+        assertTrue("2027 初一" , "2027-02-06" in h2027)
+        assertTrue("2027 初二" , "2027-02-07" in h2027)
+        assertTrue("2027 初三" , "2027-02-08" in h2027)
+        assertFalse("2027-02-09" in h2027)
+    }
+
+    @Test
+    fun `computed dates match known years`() {
+        assertTrue("2024-02-10" in ChinaWorkCalendar.computedHolidays(2024))  // 春节
+        assertTrue("2024-06-10" in ChinaWorkCalendar.computedHolidays(2024))  // 端午
+        assertTrue("2024-09-17" in ChinaWorkCalendar.computedHolidays(2024))  // 中秋
+        assertTrue("2028-01-26" in ChinaWorkCalendar.computedHolidays(2028))  // 春节
+        assertTrue("2028-05-28" in ChinaWorkCalendar.computedHolidays(2028))  // 端午
+        assertTrue("2028-10-03" in ChinaWorkCalendar.computedHolidays(2028))  // 中秋
+    }
+
+    @Test
+    fun `computed festival falls back when no official data`() {
+        // 2029 无官方数据 → 春节不执行
+        assertFalse(ChinaWorkCalendar.hasData(2029))
+        assertFalse(ChinaWorkCalendar.isWorkday(2029, 2, 13))  // 2029 春节
+        assertTrue(ChinaWorkCalendar.isWorkday(2029, 3, 1))
+    }
+
+    @Test
+    fun `qingming is computed for every year`() {
+        assertEquals("2024-04-04", "2024-04-04")
+        assertTrue("2024-04-04" in ChinaWorkCalendar.computedHolidays(2024))
+        assertTrue("2025-04-04" in ChinaWorkCalendar.computedHolidays(2025))
+        assertTrue("2026-04-05" in ChinaWorkCalendar.computedHolidays(2026))
+        assertTrue("2027-04-05" in ChinaWorkCalendar.computedHolidays(2027))
+    }
+
+    @Test
+    fun `remote data overrides bundled table`() {
+        ChinaWorkCalendar.setRemoteData(mapOf("2026-10-01" to true, "2026-10-10" to false))
+        try {
+            assertTrue(ChinaWorkCalendar.isWorkday(2026, 10, 1))    // 被改成上班
+            assertTrue(ChinaWorkCalendar.isHoliday(2026, 10, 10))   // 被改成放假
+            assertTrue(ChinaWorkCalendar.dataYears().contains(2026))
+        } finally {
+            ChinaWorkCalendar.setRemoteData(emptyMap())
+        }
+        // 恢复内置表后应为原值
+        assertTrue(ChinaWorkCalendar.isHoliday(2026, 10, 1))
+    }
+
+    @Test
+    fun `remote data enables years outside bundled range`() {
+        ChinaWorkCalendar.setRemoteData(mapOf("2028-02-01" to false))
+        try {
+            assertTrue(ChinaWorkCalendar.hasData(2028))
+            assertTrue(ChinaWorkCalendar.isHoliday(2028, 2, 1))
+        } finally {
+            ChinaWorkCalendar.setRemoteData(emptyMap())
+        }
+        assertFalse(ChinaWorkCalendar.hasData(2028))
+    }
+
     // ---------- 各种重复规则 ----------
 
     @Test
