@@ -99,13 +99,29 @@
             android:paddingTop="6dp"
             android:textSize="12sp" />
 
-        <Button
-            android:id="@+id/btnCalendar"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="36dp"
-            android:text="读取手机日历中的节假日（可选）"
-            android:textSize="12sp" />
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnCalendar"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1.6"
+                android:minHeight="36dp"
+                android:text="读取手机日历中的节假日"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnCalendarDiag"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:minHeight="36dp"
+                android:text="诊断"
+                android:textSize="12sp" />
+        </LinearLayout>
 
         <View
             android:layout_width="match_parent"

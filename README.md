@@ -80,10 +80,14 @@
 
 #### 手机日历（可选）
 
-主界面点「读取手机日历中的节假日」授权 `READ_CALENDAR` 即可。只认两类日历：
+主界面点「读取手机日历中的节假日」授权 `READ_CALENDAR` 即可。识别分两步：
 
-- 名称含「节假日 / 假期 / 法定 / 假日 / 节日 / Holiday / 中国」
-- 且只读**全天事件**，避免把个人日程当成放假
+1. **名称识别** —— 日历显示名 / 账户名 / 账户类型 含「节假日 / 假期 / 法定 / 假日 / 节日 / 调休 / Holiday / 中国 / MIUI / 小米 / HyperOS / EMUI / ColorOS…」
+2. **内容嗅探** —— 名称认不出来时，看该日历一年内是否有 ≥5 条可识别的整日事件、且跨 ≥3 个不同月份。个人日程很难同时满足，避免误判
+
+读到的都是**整日事件**（或时长接近整日的定时事件，兼容部分 ROM），不会把「下午 3 点开会」当成放假。
+
+**任何一步都没识别出来**：点旁边的「诊断」按钮，会列出手机上全部日历及其账户、整日事件数、可识别条数，并允许**手动勾选**哪个日历是节假日表。选完保存即生效；点「自动识别」可恢复默认。诊断内容可一键复制，方便反馈机型差异。
 
 标题判定：含「班」→ 调休补班；含「休 / 放假」或是法定节日名（元旦、春节…国庆）→ 放假；其它忽略。
 「国庆节补班」这类同时含节日名的补班事件，会先按「班」判为上班。
@@ -92,9 +96,11 @@
 
 | 机型 | 情况 |
 | --- | --- |
-| 小米 / 华为 / OPPO / vivo | 一般自带「中国法定节假日」日历，含调休补班 |
+| 小米 / HyperOS | 日历账户类型通常含 `miui`，能被名称识别；若日历 App 把节假日存在自己的私有库里（不经 CalendarContract 暴露），则读不到，请用「诊断」确认 |
+| 华为 / 荣耀 / OPPO / vivo | 多数自带节假日日历，含调休补班 |
 | 原生 Android / 海外版 | 通常没有该日历，此层自动跳过 |
 | Google 日历 | 需手动订阅「Holidays in China」，且只有放假、没有调休 |
+| 小米日历 | 若在「设置」里关闭了「显示节假日/农历」，需先开启 |
 
 找不到或不授权都不影响使用，会继续用下面的网络 / 内置 / 农历数据。
 
@@ -130,7 +136,7 @@ flowchart LR
 | [Workflow.kt](app/src/main/java/com/local/autotouch/Workflow.kt) | 数据模型、重复规则判定、下次触发时刻 |
 | [WorkflowStore.kt](app/src/main/java/com/local/autotouch/WorkflowStore.kt) | SharedPreferences + JSON 持久化 |
 | [ChinaWorkCalendar.kt](app/src/main/java/com/local/autotouch/ChinaWorkCalendar.kt) | 法定工作日判定：手机日历 / 网络 / 内置表 / 农历推算四层 |
-| [PhoneCalendarSource.kt](app/src/main/java/com/local/autotouch/PhoneCalendarSource.kt) | 读手机节假日日历，解析补班与放假 |
+| [PhoneCalendarSource.kt](app/src/main/java/com/local/autotouch/PhoneCalendarSource.kt) | 读手机节假日日历：名称识别 + 内容嗅探 + 手动指定 |
 | [HolidayRepository.kt](app/src/main/java/com/local/autotouch/HolidayRepository.kt) | 多镜像自动拉取节假日数据并缓存 |
 | [AutoTouchApp.kt](app/src/main/java/com/local/autotouch/AutoTouchApp.kt) | 启动时载入缓存并后台更新，更新后重排闹钟 |
 | [Scheduler.kt](app/src/main/java/com/local/autotouch/Scheduler.kt) | 每个工作流独立排闹钟 / 取消 |

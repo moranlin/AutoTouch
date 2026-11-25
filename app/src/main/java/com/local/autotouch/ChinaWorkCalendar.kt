@@ -162,6 +162,9 @@ object ChinaWorkCalendar {
     /** 推算出的法定节假日，按年缓存；nextTriggerAt 会循环上百次，不能每次重算。 */
     private val computedHolidays = HashMap<Int, Set<String>>()
 
+    /** 当前从手机日历读到的日期条数，供界面提示。 */
+    fun phoneOverrideCount(): Int = phone.size
+
     fun setPhoneCalendarData(overrides: Map<String, Boolean>) {
         phone = overrides
         computedHolidays.clear()

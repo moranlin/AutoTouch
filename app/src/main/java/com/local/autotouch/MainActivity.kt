@@ -7,6 +7,7 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.ClipboardManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.PowerManager
@@ -69,6 +70,7 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.btnBattery).setOnClickListener { requestIgnoreBattery() }
         findViewById<Button>(R.id.btnRefreshHoliday).setOnClickListener { refreshHolidayData() }
         findViewById<Button>(R.id.btnCalendar).setOnClickListener { requestCalendar() }
+        findViewById<Button>(R.id.btnCalendarDiag).setOnClickListener { showCalendarDiagnostics() }
         findViewById<Button>(R.id.btnAdd).setOnClickListener {
             startActivity(Intent(this, WorkflowEditActivity::class.java))
         }
@@ -132,17 +134,100 @@ class MainActivity : Activity() {
             return
         }
         val year = Calendar.getInstance().get(Calendar.YEAR)
-        val result = PhoneCalendarSource.read(this, year..year + 1)
+        val result = PhoneCalendarSource.readCached(this, year..year + 1)
         tvCalendar.text = when {
             !result.found ->
-                "手机日历：未找到节假日日历（小米/华为/OPPO 一般自带；原生安卓通常没有）"
+                "手机日历：未找到节假日日历。点「诊断」可查看全部日历并手动指定"
             result.overrides.isEmpty() ->
                 "手机日历：找到「${result.calendars.joinToString("、")}」，但没有可识别的全天事件"
+            result.manual ->
+                "手机日历：已手动指定「${result.calendars.joinToString("、")}」，共 " +
+                    "${result.overrides.size} 天（含调休补班）"
             else ->
-                "手机日历：已读取「${result.calendars.joinToString("、")}」共 " +
+                "手机日历：已自动识别「${result.calendars.joinToString("、")}」共 " +
                     "${result.overrides.size} 天（含调休补班）"
         }
         tvCalendar.setTextColor(if (result.found && result.overrides.isNotEmpty()) GREEN else 0xFFB26A00.toInt())
+    }
+
+    /**
+     * 列出手机上所有日历及其识别情况，并允许手动勾选当作节假日日历。
+     * 部分 ROM（如小米）把节假日放在名字完全看不出来的日历里，只能人工指定。
+     */
+    private fun showCalendarDiagnostics() {
+        if (!PhoneCalendarSource.hasPermission(this)) {
+            AlertDialog.Builder(this)
+                .setTitle("需要日历权限")
+                .setMessage("诊断需要读取日历。请先点「读取手机日历中的节假日」授权。")
+                .setPositiveButton("去授权") { _, _ -> requestCalendar() }
+                .setNegativeButton("取消", null)
+                .show()
+            return
+        }
+
+        val year = Calendar.getInstance().get(Calendar.YEAR)
+        PhoneCalendarSource.invalidate()
+        val infos = PhoneCalendarSource.diagnose(this, year..year + 1)
+        if (infos.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle("没有读到任何日历")
+                .setMessage(
+                    "系统没有返回任何日历。可能原因：\n" +
+                        "· 日历权限被「仅在使用时允许」以外的策略限制\n" +
+                        "· 小米日历/日历服务被停用\n\n" +
+                        "请到「设置 → 应用管理 → 日历」确认已启用，再重试。"
+                )
+                .setPositiveButton("知道了", null)
+                .show()
+            return
+        }
+
+        val manual = PhoneCalendarSource.manualIds(this)
+        val checked = BooleanArray(infos.size) { infos[it].id in manual }
+        val labels = infos.sortedByDescending { it.matchedEvents }.map { info ->
+            val mark = when {
+                info.id in manual -> "【手动】"
+                info.nameMatched -> "【自动】"
+                info.sniffMatched -> "【嗅探】"
+                else -> ""
+            }
+            "$mark${info.displayName}\n" +
+                "   账户 ${info.accountName}/${info.accountType}｜整日 ${info.dayEvents} 条｜" +
+                "可识别 ${info.matchedEvents} 条"
+        }.toTypedArray()
+        val sorted = infos.sortedByDescending { it.matchedEvents }
+
+        AlertDialog.Builder(this)
+            .setTitle("选择节假日日历（可多选）")
+            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
+                checked[which] = isChecked
+            }
+            .setPositiveButton("保存") { _, _ ->
+                val ids = mutableSetOf<Long>()
+                checked.forEachIndexed { index, isChecked ->
+                    if (isChecked) ids.add(sorted[index].id)
+                }
+                PhoneCalendarSource.setManualIds(this, ids)
+                reloadPhoneCalendar()
+                if (ids.isEmpty()) {
+                    toast("已恢复自动识别")
+                } else {
+                    val count = ChinaWorkCalendar.phoneOverrideCount()
+                    toast("已指定 ${ids.size} 个日历，识别到 $count 天")
+                }
+            }
+            .setNeutralButton("自动识别") { _, _ ->
+                PhoneCalendarSource.setManualIds(this, emptySet())
+                reloadPhoneCalendar()
+                toast("已恢复自动识别")
+            }
+            .setNegativeButton("取消", null)
+            .show()
+
+        // 说明性文字单独提示一次，避免设置项弹窗过长
+        if (manual.isEmpty() && infos.none { it.isHolidayCalendar }) {
+            toast("没有自动识别到，请在上面手动勾选含节假日的日历")
+        }
     }
 
     private fun requestCalendar() {
@@ -155,6 +240,7 @@ class MainActivity : Activity() {
     }
 
     private fun reloadPhoneCalendar() {
+        PhoneCalendarSource.invalidate()
         val year = Calendar.getInstance().get(Calendar.YEAR)
         val result = PhoneCalendarSource.read(this, year..year + 1)
         ChinaWorkCalendar.setPhoneCalendarData(result.overrides)

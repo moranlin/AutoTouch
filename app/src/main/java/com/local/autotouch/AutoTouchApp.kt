@@ -22,6 +22,7 @@ class AutoTouchApp : Application() {
 
     /** 读手机日历作为离线数据源；没有权限或没有节假日日历就静默跳过。 */
     private fun loadPhoneCalendar() {
+        PhoneCalendarSource.invalidate()
         if (!PhoneCalendarSource.hasPermission(this)) return
         val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
         val result = PhoneCalendarSource.read(this, year..year + 1)
