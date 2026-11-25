@@ -51,6 +51,7 @@ class WorkflowStore(context: Context) {
         put("steps", JSONArray().apply {
             w.steps.forEach { s ->
                 put(JSONObject().apply {
+                    put("type", s.type.name)
                     put("x", s.x)
                     put("y", s.y)
                     put("delay", s.delayAfterMs)
@@ -64,7 +65,16 @@ class WorkflowStore(context: Context) {
         o.optJSONArray("steps")?.let { arr ->
             for (i in 0 until arr.length()) {
                 val s = arr.optJSONObject(i) ?: continue
-                steps.add(Step(s.optInt("x"), s.optInt("y"), s.optLong("delay", 800L)))
+                steps.add(
+                    Step(
+                        type = runCatching {
+                            StepType.valueOf(s.optString("type", StepType.TAP.name))
+                        }.getOrDefault(StepType.TAP),
+                        x = s.optInt("x"),
+                        y = s.optInt("y"),
+                        delayAfterMs = s.optLong("delay", 800L)
+                    )
+                )
             }
         }
         return Workflow(

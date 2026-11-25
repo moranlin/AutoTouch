@@ -4,8 +4,17 @@ import java.util.Calendar
 
 enum class ScheduleType { DAILY, WEEKDAYS, WORKDAYS, CUSTOM }
 
-/** 一个点击步骤：在 (x, y) 点一下，然后等 [delayAfterMs] 毫秒再执行下一步。 */
+enum class StepType {
+    /** 在 (x, y) 点一下。 */
+    TAP,
+
+    /** 回到桌面并结束目标应用进程。 */
+    EXIT_APP
+}
+
+/** 一个步骤：执行动作后等 [delayAfterMs] 毫秒再执行下一步。 */
 data class Step(
+    var type: StepType = StepType.TAP,
     var x: Int = 0,
     var y: Int = 0,
     var delayAfterMs: Long = 800L

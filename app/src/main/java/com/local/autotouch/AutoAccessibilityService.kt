@@ -1,8 +1,12 @@
 package com.local.autotouch
 
 import android.accessibilityservice.AccessibilityService
+import android.app.ActivityManager
+import android.content.Context
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
+import android.os.Handler
+import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 
 /**
@@ -10,6 +14,8 @@ import android.view.accessibility.AccessibilityEvent
  * 需要在「设置 - 无障碍」中手动开启。
  */
 class AutoAccessibilityService : AccessibilityService() {
+
+    private val handler = Handler(Looper.getMainLooper())
 
     override fun onServiceConnected() {
         instance = this
@@ -20,6 +26,7 @@ class AutoAccessibilityService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     override fun onDestroy() {
+        handler.removeCallbacksAndMessages(null)
         if (instance === this) instance = null
         super.onDestroy()
     }
@@ -53,6 +60,25 @@ class AutoAccessibilityService : AccessibilityService() {
         )
     }
 
+    /**
+     * 退出目标应用：先回桌面，再结束它的后台进程，让下次启动是冷启动。
+     * 结束进程需要 KILL_BACKGROUND_PROCESSES 权限（普通权限，安装即授予）。
+     */
+    fun exitApp(packageName: String) {
+        performGlobalAction(GLOBAL_ACTION_HOME)
+        if (packageName.isBlank()) return
+        // 刚回桌面时目标应用还算「可见」，系统会忽略这次清理，
+        // 所以隔一段时间多发几次，只要有一轮生效就够了。
+        KILL_RETRY_DELAYS_MS.forEach { delay ->
+            handler.postDelayed({
+                runCatching {
+                    val am = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                    am.killBackgroundProcesses(packageName)
+                }
+            }, delay)
+        }
+    }
+
     private fun dispatch(gesture: GestureDescription): Boolean =
         dispatchGesture(gesture, object : GestureResultCallback() {
             override fun onCompleted(gestureDescription: GestureDescription?) = Unit
@@ -60,6 +86,8 @@ class AutoAccessibilityService : AccessibilityService() {
         }, null)
 
     companion object {
+        private val KILL_RETRY_DELAYS_MS = longArrayOf(600L, 1500L, 3000L)
+
         @Volatile
         var instance: AutoAccessibilityService? = null
             private set

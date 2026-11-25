@@ -11,7 +11,10 @@ import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.RadioGroup
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.TimePicker
 import android.widget.Toast
@@ -179,6 +182,29 @@ class WorkflowEditActivity : Activity() {
         row.findViewById<EditText>(R.id.etX).setText(step?.x?.toString() ?: "")
         row.findViewById<EditText>(R.id.etY).setText(step?.y?.toString() ?: "")
         row.findViewById<EditText>(R.id.etDelay).setText(step?.delayAfterMs?.toString() ?: "800")
+
+        val spinner = row.findViewById<Spinner>(R.id.spType)
+        spinner.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_item,
+            listOf("点击坐标", "退出应用")
+        ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        spinner.setSelection(if (step?.type == StepType.EXIT_APP) 1 else 0)
+
+        val tapFields = row.findViewById<View>(R.id.llTapFields)
+        val pickButton = row.findViewById<Button>(R.id.btnPick)
+        fun syncFields() {
+            val isTap = spinner.selectedItemPosition == 0
+            tapFields.visibility = if (isTap) View.VISIBLE else View.GONE
+            pickButton.visibility = if (isTap) View.VISIBLE else View.GONE
+        }
+        syncFields()
+        spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: AdapterView<*>?, v: View?, position: Int, id: Long) =
+                syncFields()
+
+            override fun onNothingSelected(p: AdapterView<*>?) = Unit
+        }
         row.findViewById<Button>(R.id.btnRemove).setOnClickListener {
             llSteps.removeView(row)
             renumberSteps()
@@ -186,6 +212,7 @@ class WorkflowEditActivity : Activity() {
         row.findViewById<Button>(R.id.btnPick).setOnClickListener {
             startPick(llSteps.indexOfChild(row))
         }
+        if (step?.type == StepType.EXIT_APP) renumberSteps()
         llSteps.addView(row)
     }
 
@@ -226,15 +253,26 @@ class WorkflowEditActivity : Activity() {
         val result = mutableListOf<Step>()
         for (i in 0 until llSteps.childCount) {
             val row = llSteps.getChildAt(i)
-            val x = row.findViewById<EditText>(R.id.etX).text.toString().trim().toIntOrNull()
-            val y = row.findViewById<EditText>(R.id.etY).text.toString().trim().toIntOrNull()
+            val type = if (row.findViewById<Spinner>(R.id.spType).selectedItemPosition == 1) {
+                StepType.EXIT_APP
+            } else {
+                StepType.TAP
+            }
             val delay = row.findViewById<EditText>(R.id.etDelay).text.toString().trim()
                 .toLongOrNull() ?: 800L
+
+            if (type == StepType.EXIT_APP) {
+                result.add(Step(type = type, delayAfterMs = delay))
+                continue
+            }
+
+            val x = row.findViewById<EditText>(R.id.etX).text.toString().trim().toIntOrNull()
+            val y = row.findViewById<EditText>(R.id.etY).text.toString().trim().toIntOrNull()
             if (x == null || y == null) {
-                toast("第 ${i + 1} 步的 X / Y 必须填整数")
+                toast("第 ${i + 1} 步的 X / Y 必须填整数（或把类型改为「退出应用」）")
                 return null
             }
-            result.add(Step(x, y, delay))
+            result.add(Step(StepType.TAP, x, y, delay))
         }
         return result
     }
