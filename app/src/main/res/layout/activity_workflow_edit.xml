@@ -241,7 +241,14 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:paddingTop="12dp"
-            android:text="坐标是屏幕绝对像素，可用开发者选项「指针位置」查看；换手机或改分辨率需重新填写。"
+            android:text="@string/pick_hint"
+            android:textSize="12sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="6dp"
+            android:text="手动填写的坐标是屏幕绝对像素，同样可用开发者选项「指针位置」核对；换手机或改分辨率需重新填写。"
             android:textSize="12sp" />
     </LinearLayout>
 </ScrollView>

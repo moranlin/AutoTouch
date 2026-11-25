@@ -42,6 +42,15 @@
 | 打开应用后等待 | 毫秒，给 App 冷启动留时间（默认 3000） |
 | 点击步骤 | 任意多步，每步 = X、Y、**之后等待**（毫秒） |
 
+### 坐标怎么填
+
+两种方式，任选：
+
+- **手动填写**：直接输入屏幕像素坐标，可用开发者选项「指针位置」核对。
+- **点屏幕取坐标**（推荐）：点步骤里的「点屏幕取坐标」→ 应用退到后台，左上角出现红色「取点」悬浮球 → 切到目标应用 → 点悬浮球 → 点要操作的位置 → 自动记录并跳回编辑页填好 X/Y。长按取点层可取消。
+
+悬浮球可拖动，不会挡住要点的位置。取点依赖悬浮窗权限，缺失时会引导去系统设置授予。
+
 「保存并立即执行一次」可以马上就验证整条链路，不用等到设定时间。
 
 ### 法定工作日
@@ -82,6 +91,8 @@ flowchart LR
 | [WakeService.kt](app/src/main/java/com/local/autotouch/WakeService.kt) | 前台服务 + WakeLock 点亮屏幕 |
 | [AutomationActivity.kt](app/src/main/java/com/local/autotouch/AutomationActivity.kt) | 解锁 → 开 App → 顺序执行步骤 |
 | [AutoAccessibilityService.kt](app/src/main/java/com/local/autotouch/AutoAccessibilityService.kt) | `dispatchGesture` 上滑与点击 |
+| [CoordPickerService.kt](app/src/main/java/com/local/autotouch/CoordPickerService.kt) | 悬浮球取点：全屏取点层、坐标回传、任务拉回前台 |
+| [PickStore.kt](app/src/main/java/com/local/autotouch/PickStore.kt) | 取点临时状态（跨进程/跨页面可靠） |
 | [MainActivity.kt](app/src/main/java/com/local/autotouch/MainActivity.kt) | 权限状态 + 工作流列表 |
 | [WorkflowEditActivity.kt](app/src/main/java/com/local/autotouch/WorkflowEditActivity.kt) | 工作流编辑 |
 
@@ -89,7 +100,8 @@ flowchart LR
 
 - **带 PIN / 密码 / 图案的锁屏无法自动解锁**：Android 从系统层面禁止辅助服务在安全锁屏上注入手势或输入密码。
 - 建议两个工作流的触发时间至少间隔 1 分钟：同一时刻触发会互相打断（后触发的会重启自动化界面）。
-- 坐标是屏幕绝对像素，换手机或改分辨率需重填；用开发者选项「指针位置」查看。
+- 坐标是屏幕绝对像素，换手机或改分辨率需重填。
+- 取点时若目标应用是横屏，取到的坐标仍是当时的屏幕坐标系，执行时也需保持同样的屏幕方向。
 - 部分国产 ROM（小米/华为/OPPO/vivo）还需额外开启「自启动」「后台弹出界面」，否则到点被拦截。
 - `setAlarmClock` 会在状态栏显示闹钟图标，这是它能精确穿透 Doze 的原因，属正常现象。
 - targetSdk 刻意保持 30（避开 Android 12+ 对前台服务类型、后台启动的新限制），仅用于个人侧载。

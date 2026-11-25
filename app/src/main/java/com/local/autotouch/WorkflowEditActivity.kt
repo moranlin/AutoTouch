@@ -3,7 +3,9 @@ package com.local.autotouch
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
@@ -50,6 +52,36 @@ class WorkflowEditActivity : Activity() {
         bindViews()
         bindActions()
         fillFromWorkflow()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        consumePickedCoordinate()
+    }
+
+    /** 从取点服务回来后，把坐标替回当初按下「取点」的那一行。 */
+    private fun consumePickedCoordinate() {
+        val pick = PickStore(this)
+        when (pick.status) {
+            PickStore.STATUS_DONE -> {
+                val sameWorkflow = pick.workflowId == workflow.id
+                val index = pick.stepIndex
+                val x = pick.x
+                val y = pick.y
+                pick.clear()
+                if (sameWorkflow && index in 0 until llSteps.childCount) {
+                    val row = llSteps.getChildAt(index)
+                    row.findViewById<EditText>(R.id.etX).setText(x.toString())
+                    row.findViewById<EditText>(R.id.etY).setText(y.toString())
+                    toast("已填入坐标 ($x, $y)")
+                }
+            }
+            PickStore.STATUS_PENDING -> {
+                // 用户回到本页但没取点，说明放弃了，收掉悬浮球
+                stopService(Intent(this, CoordPickerService::class.java))
+                pick.clear()
+            }
+        }
     }
 
     private fun bindViews() {
@@ -151,7 +183,37 @@ class WorkflowEditActivity : Activity() {
             llSteps.removeView(row)
             renumberSteps()
         }
+        row.findViewById<Button>(R.id.btnPick).setOnClickListener {
+            startPick(llSteps.indexOfChild(row))
+        }
         llSteps.addView(row)
+    }
+
+    private fun startPick(index: Int) {
+        if (index < 0) return
+        if (!Settings.canDrawOverlays(this)) {
+            AlertDialog.Builder(this)
+                .setTitle("需要悬浮窗权限")
+                .setMessage("取点功能要在其他应用上层显示悬浮球。请在接下来的设置页里允许「显示在其他应用上层」。")
+                .setPositiveButton("去设置") { _, _ ->
+                    runCatching {
+                        startActivity(
+                            Intent(
+                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:$packageName")
+                            )
+                        )
+                    }
+                }
+                .setNegativeButton("取消", null)
+                .show()
+            return
+        }
+
+        // 先落库，保证取点回来时能对上工作流
+        PickStore(this).begin(workflow.id, index)
+        CoordPickerService.start(this, taskId)
+        moveTaskToBack(true)
     }
 
     private fun renumberSteps() {
