@@ -140,7 +140,7 @@ class AutomationActivity : Activity() {
         val step = wf.steps[stepIndex]
         when (step.type) {
             StepType.TAP -> service.tap(step.x.toFloat(), step.y.toFloat())
-            StepType.EXIT_APP -> service.exitApp(wf.targetPackage)
+            StepType.EXIT_APP -> service.exitApp(wf.targetPackage, step.killBackground)
         }
         stepIndex++
         handler.postDelayed({ runNextStep() }, step.delayAfterMs.coerceAtLeast(100L))

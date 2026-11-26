@@ -64,18 +64,28 @@ class AutoAccessibilityService : AccessibilityService() {
      * 退出目标应用：先回桌面，再结束它的后台进程，让下次启动是冷启动。
      * 结束进程需要 KILL_BACKGROUND_PROCESSES 权限（普通权限，安装即授予）。
      */
-    fun exitApp(packageName: String) {
+    fun exitApp(packageName: String, killBackground: Boolean = true) {
         performGlobalAction(GLOBAL_ACTION_HOME)
-        if (packageName.isBlank()) return
-        // 刚回桌面时目标应用还算「可见」，系统会忽略这次清理，
-        // 所以隔一段时间多发几次，只要有一轮生效就够了。
+        if (!killBackground || packageName.isBlank()) return
+
+        // 刚回桌面时目标应用仍算「可见」，系统会忽略这次清理；
+        // 部分 ROM（如 MIUI）还会自己保活。所以按递增间隔多发几次，
+        // 只要有一轮在它真正沉到后台后命中就够了。
         KILL_RETRY_DELAYS_MS.forEach { delay ->
-            handler.postDelayed({
-                runCatching {
-                    val am = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-                    am.killBackgroundProcesses(packageName)
-                }
-            }, delay)
+            handler.postDelayed({ killOnce(packageName) }, delay)
+        }
+    }
+
+    private fun killOnce(packageName: String) {
+        val am = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        // 标准接口：普通权限即可，能结束后台进程
+        runCatching { am.killBackgroundProcesses(packageName) }
+        // 更彻底但需要系统权限，普通应用会抛 SecurityException，被静默忽略；
+        // 某些定制 ROM 对已授权应用放行，所以顺手试一下并无副作用。
+        runCatching {
+            ActivityManager::class.java
+                .getMethod("forceStopPackage", String::class.java)
+                .invoke(am, packageName)
         }
     }
 
@@ -86,7 +96,8 @@ class AutoAccessibilityService : AccessibilityService() {
         }, null)
 
     companion object {
-        private val KILL_RETRY_DELAYS_MS = longArrayOf(600L, 1500L, 3000L)
+        private val KILL_RETRY_DELAYS_MS =
+            longArrayOf(400L, 900L, 1600L, 2600L, 4000L, 6000L, 9000L, 12000L, 15000L)
 
         @Volatile
         var instance: AutoAccessibilityService? = null

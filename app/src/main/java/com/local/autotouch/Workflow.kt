@@ -17,7 +17,9 @@ data class Step(
     var type: StepType = StepType.TAP,
     var x: Int = 0,
     var y: Int = 0,
-    var delayAfterMs: Long = 800L
+    var delayAfterMs: Long = 800L,
+    /** 仅 EXIT_APP 使用：true = 回桌面后结束后台进程；false = 只回桌面。 */
+    var killBackground: Boolean = true
 )
 
 data class Workflow(

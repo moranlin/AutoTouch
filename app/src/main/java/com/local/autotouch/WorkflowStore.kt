@@ -55,6 +55,7 @@ class WorkflowStore(context: Context) {
                     put("x", s.x)
                     put("y", s.y)
                     put("delay", s.delayAfterMs)
+                    put("killBg", s.killBackground)
                 })
             }
         })
@@ -72,7 +73,8 @@ class WorkflowStore(context: Context) {
                         }.getOrDefault(StepType.TAP),
                         x = s.optInt("x"),
                         y = s.optInt("y"),
-                        delayAfterMs = s.optLong("delay", 800L)
+                        delayAfterMs = s.optLong("delay", 800L),
+                        killBackground = s.optBoolean("killBg", true)
                     )
                 )
             }

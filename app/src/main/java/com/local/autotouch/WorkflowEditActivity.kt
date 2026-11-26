@@ -195,10 +195,13 @@ class WorkflowEditActivity : Activity() {
 
         val tapFields = row.findViewById<View>(R.id.llTapFields)
         val pickButton = row.findViewById<Button>(R.id.btnPick)
+        val killBox = row.findViewById<CheckBox>(R.id.cbKillBg)
+        killBox.isChecked = step?.killBackground ?: true
         fun syncFields() {
             val isTap = spinner.selectedItemPosition == 0
             tapFields.visibility = if (isTap) View.VISIBLE else View.GONE
             pickButton.visibility = if (isTap) View.VISIBLE else View.GONE
+            killBox.visibility = if (isTap) View.GONE else View.VISIBLE
         }
         syncFields()
         spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
@@ -264,7 +267,8 @@ class WorkflowEditActivity : Activity() {
                 .toLongOrNull() ?: 800L
 
             if (type == StepType.EXIT_APP) {
-                result.add(Step(type = type, delayAfterMs = delay))
+                val kill = row.findViewById<CheckBox>(R.id.cbKillBg).isChecked
+                result.add(Step(type = type, delayAfterMs = delay, killBackground = kill))
                 continue
             }
 

@@ -64,6 +64,14 @@
             android:textSize="13sp" />
     </LinearLayout>
 
+    <CheckBox
+        android:id="@+id/cbKillBg"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="回桌面后结束后台进程（关闭则只回桌面）"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
